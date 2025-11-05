@@ -6,9 +6,11 @@ dotenv.config({
   path: "./.env",
 });
 
+
+
 const PORT = process.env.PORT || 5010;
 
-// Connect to MongoDB
+// connecting to database
 connectDB();
 
 // Start Server
@@ -17,6 +19,7 @@ app.listen(PORT, () => {
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
   console.log(`📍 Test endpoint: http://localhost:${PORT}/api/test`);
 });
+
 
 // connectDB()
 //   .then(() => {
