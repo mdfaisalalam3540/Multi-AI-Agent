@@ -8,11 +8,15 @@ const ChatInterface = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState("");
 
+  // Use environment variable with fallback
+  const BACKEND_URL =
+    import.meta.env.VITE_BACKEND_URL || "http://localhost:5010";
+
   // Test backend connection
   const testBackendConnection = async () => {
     try {
-      console.log("Testing backend connection...");
-      const response = await fetch("http://localhost:5010/api/test");
+      console.log("Testing backend connection to:", BACKEND_URL);
+      const response = await fetch(`${BACKEND_URL}/api/test`);
 
       // Check if response is JSON
       const contentType = response.headers.get("content-type");
@@ -43,7 +47,7 @@ const ChatInterface = () => {
   // Send message to backend
   const sendMessageToBackend = async (message) => {
     try {
-      const response = await fetch("http://localhost:5010/api/chat", {
+      const response = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -76,18 +80,36 @@ const ChatInterface = () => {
 
   // Load messages and test connection on component mount
   useEffect(() => {
+    // Load messages from localStorage FIRST
     const savedMessages = localStorage.getItem("chatMessages");
+    console.log("Loading messages from localStorage:", savedMessages);
+
     if (savedMessages) {
-      setMessages(JSON.parse(savedMessages));
+      try {
+        const parsedMessages = JSON.parse(savedMessages);
+        setMessages(parsedMessages);
+        console.log("Successfully loaded", parsedMessages.length, "messages");
+      } catch (error) {
+        console.error("Error parsing saved messages:", error);
+        // If parsing fails, start fresh but don't add welcome message yet
+        setMessages([]);
+      }
+    } else {
+      // No saved messages - we'll add welcome message after connection test
+      console.log("No existing messages found");
+      setMessages([]);
     }
 
+    // Then test connection (this should NOT affect existing messages)
     const initializeConnection = async () => {
       try {
         await testBackendConnection();
         setIsConnected(true);
         setConnectionError("");
 
-        if (!savedMessages) {
+        // Only add welcome message if there are absolutely no messages
+        const currentMessages = localStorage.getItem("chatMessages");
+        if (!currentMessages) {
           const welcomeMessage = {
             id: Date.now(),
             text: `Welcome to Enterprise AI Analyst! How can I help with your business analytics today?`,
@@ -96,17 +118,28 @@ const ChatInterface = () => {
             fullTimestamp: new Date().toISOString(),
           };
           setMessages([welcomeMessage]);
+          console.log("Added welcome message to new chat");
         }
       } catch (error) {
         setIsConnected(false);
-        const errorMessage = {
-          id: Date.now(),
-          text: "Backend connection failed. Please make sure the server is running on port 5000.",
-          isUser: false,
-          timestamp: new Date().toLocaleTimeString(),
-          fullTimestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [errorMessage, ...prev.slice(-9)]);
+        setConnectionError(error.message);
+        console.error(
+          "Backend connection failed, but keeping existing messages"
+        );
+
+        // Even if connection fails, if we have messages, keep them
+        // Only add error message if completely empty
+        const currentMessages = localStorage.getItem("chatMessages");
+        if (!currentMessages) {
+          const errorMessage = {
+            id: Date.now(),
+            text: `Backend connection failed. Please make sure the server is running on ${BACKEND_URL}`,
+            isUser: false,
+            timestamp: new Date().toLocaleTimeString(),
+            fullTimestamp: new Date().toISOString(),
+          };
+          setMessages([errorMessage]);
+        }
       }
     };
 
@@ -115,7 +148,10 @@ const ChatInterface = () => {
 
   // Save messages to localStorage whenever messages change
   useEffect(() => {
-    localStorage.setItem("chatMessages", JSON.stringify(messages));
+    if (messages.length > 0) {
+      localStorage.setItem("chatMessages", JSON.stringify(messages));
+      console.log("Auto-saved", messages.length, "messages to localStorage");
+    }
   }, [messages]);
 
   const handleSend = async () => {
@@ -137,11 +173,13 @@ const ChatInterface = () => {
     try {
       const response = await sendMessageToBackend(currentInput);
       const aiMessage = {
-        id: response.messageId,
+        id: response.messageId || Date.now() + 1,
         text: response.reply,
         isUser: false,
-        timestamp: new Date(response.timestamp).toLocaleTimeString(),
-        fullTimestamp: response.timestamp,
+        timestamp: new Date(
+          response.timestamp || new Date()
+        ).toLocaleTimeString(),
+        fullTimestamp: response.timestamp || new Date().toISOString(),
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
@@ -170,8 +208,19 @@ const ChatInterface = () => {
   };
 
   const clearChat = () => {
+    console.log("Clearing all chat messages");
     setMessages([]);
     localStorage.removeItem("chatMessages");
+
+    // Add fresh welcome message after clearing
+    const welcomeMessage = {
+      id: Date.now(),
+      text: `Welcome to Enterprise AI Analyst! How can I help with your business analytics today?`,
+      isUser: false,
+      timestamp: new Date().toLocaleTimeString(),
+      fullTimestamp: new Date().toISOString(),
+    };
+    setMessages([welcomeMessage]);
   };
 
   const handleKeyPress = (e) => {
@@ -226,7 +275,7 @@ const ChatInterface = () => {
         </div>
       </div>
 
-      {/* Messages Container - FIXED GRADIENT CLASS */}
+      {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-6 bg-linear-to-br from-blue-50 to-purple-50">
         <div className="max-w-3xl mx-auto">
           {messages.map((message) => (
@@ -268,7 +317,7 @@ const ChatInterface = () => {
             placeholder={
               isConnected
                 ? "Ask about business analytics, data insights, or reports..."
-                : "Backend disconnected - please start the server"
+                : `Backend disconnected - please start the server at ${BACKEND_URL}`
             }
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
             disabled={!isConnected || isLoading}
@@ -292,7 +341,7 @@ const ChatInterface = () => {
           <span className="text-xs text-gray-500">
             {isConnected
               ? "Press Enter to send • Shift+Enter for new line"
-              : "Start backend server: cd backend && npm start"}
+              : `Start backend server at ${BACKEND_URL}`}
           </span>
         </div>
       </div>
