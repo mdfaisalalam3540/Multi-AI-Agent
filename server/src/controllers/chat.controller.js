@@ -8,7 +8,7 @@ import { AiResponse } from "../models/aiResponse.model.js";
 
 // generateAIResponse: a function that simulates or generates an AI-based reply
 // based on the user's input message.
-import { generateAIResponse } from "../Messages/generateAIResponse.js";
+import { aiResponses } from "../Messages/generateAIResponse.js";
 
 // ApiError: a custom error handling class that helps create structured error messages
 // with HTTP status codes and clear messages.
@@ -17,6 +17,7 @@ import { ApiError } from "../utils/ApiError.js";
 // asyncHandler: a helper function that wraps async functions in Express.
 // It automatically passes errors to the global error handler without manual try/catch.
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 // ============================================================
 // Controller: chatWithAI
@@ -63,7 +64,7 @@ const chatWithAI = asyncHandler(async (req, res) => {
   // The generateAIResponse() function contains the logic for how the AI
   // forms its reply based on the input message.
   // It can be simple (rule-based) or complex (LLM-powered).
-  const reply = generateAIResponse(message);
+  const reply = await aiResponses(message);
 
   // ------------------------------------------------------------
   // Step 5: Save chat data to MongoDB
@@ -79,12 +80,9 @@ const chatWithAI = asyncHandler(async (req, res) => {
   // - A timestamp (to track when the response was created)
   // - A unique messageId (for tracking)
   // - A type identifier ("analysis_response") to categorize responses.
-  return res.status(200).json({
-    reply,
-    timestamp: new Date().toISOString(),
-    messageId: Date.now(),
-    type: "analysis_response",
-  });
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { reply }, "AI response generated successful"));
 });
 
 // ============================================================
@@ -93,3 +91,23 @@ const chatWithAI = asyncHandler(async (req, res) => {
 // This allows the controller to be imported and used inside
 // your route files (for example, chat.route.js).
 export { chatWithAI };
+
+// import { generateAIResponse } from "../Messages/generateAIResponse.js";
+// import { asyncHandler } from "../utils/asyncHandler.js";
+// import { ApiError } from "../utils/ApiError.js";
+// import { ApiResponse } from "../utils/ApiResponse.js";
+// import { AiResponse } from "../models/aiResponse.model.js";
+
+// export const chatWithAI = asyncHandler(async (req, res) => {
+//   const { message } = req.body;
+
+//   if (!message) throw new ApiError(400, "Message is required");
+
+//   const reply = (await generateAIResponse(message)) || "No AI reply generated.";
+
+//   await AiResponse.create({ message, reply });
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, { reply }, "AI response generated"));
+// });

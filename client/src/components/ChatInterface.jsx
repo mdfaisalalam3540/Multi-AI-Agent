@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext"; // auth context for logout
+import { useAuth } from "../context/AuthContext";
 import Message from "./Message";
 
 const ChatInterface = () => {
-  const { logout } = useAuth(); // logout function from context
+  const { logout } = useAuth();
 
   // state management
   const [messages, setMessages] = useState([]);
@@ -12,11 +12,11 @@ const ChatInterface = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState("");
 
-  // backend URL setup
+  // backend URL
   const BACKEND_URL =
-    import.meta.env.VITE_BACKEND_URL || "http://localhost:5010";
+    import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
-  // check backend connection
+  // test backend connection
   const testBackendConnection = async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/test`);
@@ -47,7 +47,7 @@ const ChatInterface = () => {
     }
   };
 
-  // load saved messages + check backend on mount
+  // load saved messages and check backend on mount
   useEffect(() => {
     const saved = localStorage.getItem("chatMessages");
     if (saved) {
@@ -57,6 +57,7 @@ const ChatInterface = () => {
         setMessages([]);
       }
     }
+
     const init = async () => {
       try {
         await testBackendConnection();
@@ -95,6 +96,7 @@ const ChatInterface = () => {
   // send message handler
   const handleSend = async () => {
     if (!inputMessage.trim() || isLoading) return;
+
     const userMsg = {
       id: Date.now(),
       text: inputMessage,
@@ -102,20 +104,38 @@ const ChatInterface = () => {
       timestamp: new Date().toLocaleTimeString(),
       fullTimestamp: new Date().toISOString(),
     };
+
     setMessages((prev) => [...prev, userMsg]);
     setInputMessage("");
     setIsLoading(true);
 
     try {
       const res = await sendMessageToBackend(userMsg.text);
+      const fullReply = res.data?.reply || "⚠️ No response received from AI.";
+
+      // create an empty AI message for typing effect
       const aiMsg = {
-        id: res.messageId || Date.now() + 1,
-        text: res.reply,
+        id: Date.now() + 1,
+        text: "",
         isUser: false,
-        timestamp: new Date(res.timestamp || new Date()).toLocaleTimeString(),
-        fullTimestamp: res.timestamp || new Date().toISOString(),
+        timestamp: new Date().toLocaleTimeString(),
+        fullTimestamp: new Date().toISOString(),
       };
+
+      // show empty AI message first
       setMessages((prev) => [...prev, aiMsg]);
+
+      // simulate typing effect (like ChatGPT)
+      let index = 0;
+      const interval = setInterval(() => {
+        index++;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiMsg.id ? { ...m, text: fullReply.slice(0, index) } : m
+          )
+        );
+        if (index >= fullReply.length) clearInterval(interval);
+      }, 15); // typing speed
     } catch (err) {
       const errorMsg = {
         id: Date.now() + 1,
@@ -142,7 +162,7 @@ const ChatInterface = () => {
     }
   };
 
-  // clear chat messages
+  // clear chat
   const clearChat = () => {
     localStorage.removeItem("chatMessages");
     const welcome = {
@@ -155,7 +175,7 @@ const ChatInterface = () => {
     setMessages([welcome]);
   };
 
-  // send message on Enter key
+  // handle Enter key
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -166,7 +186,7 @@ const ChatInterface = () => {
   return (
     <div className="flex flex-col h-[70vh] max-w-4xl mx-auto my-8 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
       {/* Header */}
-      <div className="flex justify-between items-center px-6 py-4 bg-linear-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+      <div className="flex justify-between items-center px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
         <div className="flex items-center space-x-3">
           <div
             className={`w-3 h-3 rounded-full ${
@@ -202,7 +222,7 @@ const ChatInterface = () => {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 bg-linear-to-br from-blue-50 to-purple-50">
+      <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-blue-50 to-purple-50">
         <div className="max-w-3xl mx-auto">
           {messages.map((m) => (
             <Message
