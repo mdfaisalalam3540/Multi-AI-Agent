@@ -187,8 +187,73 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 // ============================================================
+// Controller: logoutUser
+// ============================================================
+// This function handles the user logout process.
+// The flow:
+// 1. Remove the user's refresh token from the database.
+// 2. Clear cookies that store authentication tokens.
+// 3. Send a success response to confirm logout.
+// ============================================================
+
+const logoutUser = asyncHandler(async (req, res) => {
+  // ------------------------------------------------------------
+  // Step 1: Remove refresh token from user record in the database
+  // ------------------------------------------------------------
+  // When a user logs out, we remove the stored refresh token so it
+  // can’t be used again to generate new access tokens.
+  // `findByIdAndUpdate` finds the current user by their ID (req.user._id)
+  // and sets the refreshToken field to undefined.
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: { refreshToken: undefined }, // delete stored refresh token
+    },
+    {
+      new: true, // return the updated document (not required here, but good practice)
+    }
+  );
+
+  // ------------------------------------------------------------
+  // Step 2: Define cookie options
+  // ------------------------------------------------------------
+  // httpOnly: prevents client-side JavaScript from reading cookies (security)
+  // secure: ensures cookies are sent only over HTTPS
+  // sameSite: "None" allows cross-origin cookies (useful for frontend-backend setups)
+  // maxAge: defines how long the cookie should live before expiring (10 days)
+  const options = {
+    httpOnly: true,
+    secure: true,
+    sameSite: "None",
+    maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days in milliseconds
+  };
+
+  // ------------------------------------------------------------
+  // Step 3: Clear authentication cookies and send response
+  // ------------------------------------------------------------
+  // clearCookie("accessToken") removes the stored access token.
+  // We then send back a success message confirming logout.
+  // Note: It's good practice to clear both accessToken and refreshToken.
+  return res
+    .status(200)
+    .clearCookie("accessToken", options) // remove access token cookie
+    .clearCookie("refreshToken", options) // also remove refresh token cookie
+    .json(
+      new ApiResponse(
+        200,
+        {
+          username: req.user.username,
+          fullName: req.user.fullName,
+          loggedOutAt: new Date().toLocaleString(),
+        },
+        "User logged out successfully"
+      )
+    ); // { username: req.user.username, fullName: req.user.fullName } => Include the logged-out here so that people can know that they are logged out
+});
+
+// ============================================================
 // Export controllers for use in routes
 // ============================================================
 // These functions can now be imported into route files
 // such as user.routes.js to define endpoints.
-export { registerUser, loginUser };
+export { registerUser, loginUser, logoutUser };
