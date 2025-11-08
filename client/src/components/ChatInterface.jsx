@@ -1,22 +1,30 @@
+// src/components/ChatInterface.jsx
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Message from "./Message";
+import { Paperclip } from "lucide-react";
 
 const ChatInterface = () => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  // state management
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState("");
 
-  // backend URL
   const BACKEND_URL =
-    import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+    import.meta.env.VITE_BACKEND_URL || "http://localhost:5010";
 
-  // test backend connection
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!user) navigate("/login");
+  }, [user, navigate]);
+
+  // Test backend connection
   const testBackendConnection = async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/test`);
@@ -32,22 +40,31 @@ const ChatInterface = () => {
     }
   };
 
-  // send message to backend
+  // Send message to backend
   const sendMessageToBackend = async (message) => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      throw error;
-    }
+    const response = await fetch(`${BACKEND_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
   };
 
-  // load saved messages and check backend on mount
+  // Upload file to backend
+  const uploadFileToBackend = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${BACKEND_URL}/api/docs/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  };
+
+  // Load saved messages on mount
   useEffect(() => {
     const saved = localStorage.getItem("chatMessages");
     if (saved) {
@@ -64,68 +81,94 @@ const ChatInterface = () => {
         if (!saved) {
           const welcome = {
             id: Date.now(),
-            text: "Welcome to Enterprise AI Analyst! How can I help with your business analytics today?",
+            text: "Welcome to Enterprise AI Analyst! Upload a document or ask a question below.",
             isUser: false,
             timestamp: new Date().toLocaleTimeString(),
-            fullTimestamp: new Date().toISOString(),
           };
           setMessages([welcome]);
         }
       } catch {
-        if (!saved) {
-          const errMsg = {
-            id: Date.now(),
-            text: `Backend connection failed. Please make sure the server is running on ${BACKEND_URL}`,
-            isUser: false,
-            timestamp: new Date().toLocaleTimeString(),
-            fullTimestamp: new Date().toISOString(),
-          };
-          setMessages([errMsg]);
-        }
+        const errMsg = {
+          id: Date.now(),
+          text: `Backend connection failed. Please start your server at ${BACKEND_URL}`,
+          isUser: false,
+          timestamp: new Date().toLocaleTimeString(),
+        };
+        setMessages([errMsg]);
       }
     };
+
     init();
   }, []);
 
-  // auto-save messages
+  // Auto-save messages
   useEffect(() => {
     if (messages.length > 0)
       localStorage.setItem("chatMessages", JSON.stringify(messages));
   }, [messages]);
 
-  // send message handler
+  // Handle message send
   const handleSend = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+    if ((!inputMessage.trim() && !selectedFile) || isLoading) return;
+    setIsLoading(true);
+
+    if (selectedFile) {
+      const userMsg = {
+        id: Date.now(),
+        text: `Uploaded: ${selectedFile.name}`,
+        isUser: true,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+
+      try {
+        const res = await uploadFileToBackend(selectedFile);
+        const successMsg = {
+          id: Date.now() + 1,
+          text: `${res.message}\n\nExtracted Summary:\n${
+            res.data?.extractedText?.slice(0, 500) || "No text extracted."
+          }`,
+          isUser: false,
+          timestamp: new Date().toLocaleTimeString(),
+        };
+        setMessages((prev) => [...prev, successMsg]);
+      } catch (err) {
+        const errorMsg = {
+          id: Date.now() + 2,
+          text: `File upload failed: ${err.message}`,
+          isUser: false,
+          timestamp: new Date().toLocaleTimeString(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+      } finally {
+        setSelectedFile(null);
+        setIsLoading(false);
+      }
+      return;
+    }
 
     const userMsg = {
       id: Date.now(),
       text: inputMessage,
       isUser: true,
       timestamp: new Date().toLocaleTimeString(),
-      fullTimestamp: new Date().toISOString(),
     };
-
     setMessages((prev) => [...prev, userMsg]);
     setInputMessage("");
-    setIsLoading(true);
 
     try {
       const res = await sendMessageToBackend(userMsg.text);
-      const fullReply = res.data?.reply || "⚠️ No response received from AI.";
+      const fullReply = res.data?.reply || "No response received from AI.";
 
-      // create an empty AI message for typing effect
       const aiMsg = {
         id: Date.now() + 1,
         text: "",
         isUser: false,
         timestamp: new Date().toLocaleTimeString(),
-        fullTimestamp: new Date().toISOString(),
       };
 
-      // show empty AI message first
       setMessages((prev) => [...prev, aiMsg]);
 
-      // simulate typing effect (like ChatGPT)
       let index = 0;
       const interval = setInterval(() => {
         index++;
@@ -135,14 +178,13 @@ const ChatInterface = () => {
           )
         );
         if (index >= fullReply.length) clearInterval(interval);
-      }, 15); // typing speed
+      }, 15);
     } catch (err) {
       const errorMsg = {
         id: Date.now() + 1,
         text: `Failed to get response: ${err.message}`,
         isUser: false,
         timestamp: new Date().toLocaleTimeString(),
-        fullTimestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -150,32 +192,7 @@ const ChatInterface = () => {
     }
   };
 
-  // retry backend connection
-  const retryConnection = async () => {
-    try {
-      await testBackendConnection();
-      setIsConnected(true);
-      setConnectionError("");
-    } catch (error) {
-      setIsConnected(false);
-      setConnectionError(error.message);
-    }
-  };
-
-  // clear chat
-  const clearChat = () => {
-    localStorage.removeItem("chatMessages");
-    const welcome = {
-      id: Date.now(),
-      text: "Welcome to Enterprise AI Analyst! How can I help with your business analytics today?",
-      isUser: false,
-      timestamp: new Date().toLocaleTimeString(),
-      fullTimestamp: new Date().toISOString(),
-    };
-    setMessages([welcome]);
-  };
-
-  // handle Enter key
+  // Handle Enter key
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -183,10 +200,18 @@ const ChatInterface = () => {
     }
   };
 
+  const handleFileSelect = (e) => setSelectedFile(e.target.files[0]);
+
+  // Clear chat instantly
+  const handleClearChat = () => {
+    localStorage.removeItem("chatMessages");
+    setMessages([]);
+  };
+
   return (
     <div className="flex flex-col h-[70vh] max-w-4xl mx-auto my-8 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
       {/* Header */}
-      <div className="flex justify-between items-center px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+      <div className="flex justify-between items-center px-6 py-4 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center space-x-3">
           <div
             className={`w-3 h-3 rounded-full ${
@@ -198,31 +223,31 @@ const ChatInterface = () => {
           </span>
           {connectionError && (
             <button
-              onClick={retryConnection}
+              onClick={testBackendConnection}
               className="ml-3 text-xs text-blue-600 hover:text-blue-800 underline"
             >
               Retry
             </button>
           )}
         </div>
-        <div className="flex space-x-2">
+        <div className="flex space-x-3">
+          <button
+            onClick={handleClearChat}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+          >
+            Clear
+          </button>
           <button
             onClick={logout}
             className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
           >
             Logout
           </button>
-          <button
-            onClick={clearChat}
-            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg"
-          >
-            Clear
-          </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-blue-50 to-purple-50">
+      <div className="flex-1 overflow-y-auto p-6 bg-linear-to-br from-blue-50 to-purple-50">
         <div className="max-w-3xl mx-auto">
           {messages.map((m) => (
             <Message
@@ -232,64 +257,49 @@ const ChatInterface = () => {
               timestamp={m.timestamp}
             />
           ))}
-          {isLoading && (
-            <div className="flex justify-start mb-4">
-              <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-                <div className="flex space-x-2">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.1s" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Input */}
       <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-        <div className="flex space-x-4 max-w-3xl mx-auto">
+        <div className="flex items-center space-x-3 max-w-3xl mx-auto">
+          <input
+            id="file-upload"
+            type="file"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <label htmlFor="file-upload" className="cursor-pointer">
+            <Paperclip className="w-5 h-5 text-gray-500 hover:text-blue-600 transition" />
+          </label>
+
           <input
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={
-              isConnected
-                ? "Ask about business analytics, data insights, or reports..."
-                : `Backend disconnected - start the server at ${BACKEND_URL}`
+              selectedFile
+                ? `Ready to upload: ${selectedFile.name}`
+                : "Ask a question or attach a file..."
             }
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             disabled={!isConnected || isLoading}
           />
+
           <button
             onClick={handleSend}
-            disabled={!isConnected || !inputMessage.trim() || isLoading}
+            disabled={!isConnected || isLoading}
             className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {isLoading ? (
-              <div className="flex items-center">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                Sending...
-              </div>
-            ) : (
-              "Send"
-            )}
+            {isLoading ? "..." : "Send"}
           </button>
         </div>
-        <div className="text-center mt-2">
-          <span className="text-xs text-gray-500">
-            {isConnected
-              ? "Press Enter to send • Shift+Enter for new line"
-              : `Backend disconnected at ${BACKEND_URL}`}
-          </span>
-        </div>
+        {selectedFile && (
+          <p className="text-xs text-gray-500 text-center mt-1">
+            Selected file: {selectedFile.name}
+          </p>
+        )}
       </div>
     </div>
   );

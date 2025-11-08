@@ -5,6 +5,7 @@ import Header from "./components/Header";
 import ChatPage from "./pages/ChatPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import FileUpload from "./components/FileUpload";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/chat" element={<ChatPage />} />
+              <Route path="/upload" element={<FileUpload />} />
             </Routes>
           </main>
           <footer className="text-center py-6 text-gray-600 text-sm">

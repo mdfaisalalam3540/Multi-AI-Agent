@@ -83,6 +83,10 @@ import { router } from "./routes/user.route.js";
 // Example: POST /api/v1/users/register → handled by router
 app.use("/api/v1/users", router);
 
+// upload doc route
+import { documentRoutes } from "./routes/documentUpload.route.js";
+app.use("/api/docs", documentRoutes);
+
 // ============================================================
 // Health Check Route
 // ============================================================

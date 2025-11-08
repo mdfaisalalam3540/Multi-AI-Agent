@@ -1,25 +1,36 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  // global user state
   const [user, setUser] = useState(null);
 
-  // restore user from localStorage on load
+  // Restore user on app load
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
-  // keep localStorage in sync
+  // Keep user in sync with localStorage
   useEffect(() => {
-    if (user) localStorage.setItem("user", JSON.stringify(user));
-    else localStorage.removeItem("user");
+    if (user) {
+      localStorage.setItem("user", JSON.stringify(user));
+    } else {
+      localStorage.removeItem("user");
+    }
   }, [user]);
 
-  const login = (userData) => setUser(userData); // set user
-  const logout = () => setUser(null); // clear user
+  const login = (userData) => {
+    setUser(userData);
+    localStorage.setItem("user", JSON.stringify(userData)); // ensure persistence
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem("user");
+    localStorage.removeItem("chatMessages"); // clear chat on logout too
+  };
 
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
